@@ -1,0 +1,4 @@
+node_modules/
+.DS_Store
+# Working notes for coding agents; not part of the project.
+.claude/plan*.md

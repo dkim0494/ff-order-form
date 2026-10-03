@@ -1,0 +1,18 @@
+{
+  "name": "ff-order-form-tests",
+  "private": true,
+  "description": "Development-only tests. Not needed to host the form.",
+  "scripts": {
+    "test": "node data-check.test.js && node art.test.js && node journey.test.js && node gate.test.js && node backend.test.js && node catalog-sweep.test.js",
+    "check": "node data-check.test.js && node art.test.js",
+    "test:data": "node data-check.test.js",
+    "test:art": "node art.test.js",
+    "test:journey": "node journey.test.js",
+    "test:gate": "node gate.test.js",
+    "test:backend": "node backend.test.js",
+    "test:sweep": "node catalog-sweep.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
