@@ -8,7 +8,7 @@ window.FF_CONFIG = {
 
   // Your Google Apps Script web app URL (ends in /exec). See README.md.
   // Leave empty to run in preview mode: everything works, nothing is sent.
-  endpoint: '',
+  endpoint: 'https://script.google.com/macros/s/AKfycbybG4UDXO1fnUp8i9sBomb2d2P2toddExrsOd8yvqZTqxJDaJLGXVkcr8hxppXizvOb/exec',
 
   // When true, the page is locked until a valid invite is opened or entered.
   // Invites live in your Google Sheet (menu Friends & Family > Manage invites…),
