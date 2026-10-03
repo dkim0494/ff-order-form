@@ -8,7 +8,7 @@ const CODE_PATH = require('path').resolve(__dirname, '..', '..', 'apps-script', 
 
 function makeEnv(opts) {
   opts = Object.assign({ maxRows: 1000, maxCols: 26, apostropheLiteralInText: true, mailQuota: 100, owner: 'owner@example.com', settings: null }, opts || {});
-  const log = { mails: [], errors: [], cachePuts: [], triggers: [] };
+  const log = { mails: [], errors: [], cachePuts: [], triggers: [], menus: [], alerts: [], sidebars: [] };
 
   class Cell { constructor() { this.v = ''; this.fmt = null; this.formula = null; this.dv = null; this.checkbox = false; } }
 
@@ -109,13 +109,30 @@ function makeEnv(opts) {
   };
 
   const props = new Map();
+  // Sheet UI: records menus, alerts and sidebars; prompt() is not used by Code.gs any more.
+  const ui = {
+    ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' }, Button: { OK: 'OK', CANCEL: 'CANCEL' },
+    alert(...a) { log.alerts.push(a); },
+    showSidebar(html) { log.sidebars.push(html); },
+    createMenu(name) { const m = { name, items: [], addItem(label, fn) { m.items.push([label, fn]); return m; }, addToUi() { log.menus.push(m); } }; return m; },
+  };
   const ctx = {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (props.has(k) ? props.get(k) : null), setProperty(k, v) { if (typeof v !== 'string') throw new Error('string'); if (v.length > 9000) throw new Error('Exception: value too large'); props.set(k, v); return this; }, deleteProperty(k) { props.delete(k); } }) },
     console: { log: () => {}, error: (...a) => log.errors.push(a.join(' ')), info: () => {}, warn: () => {} },
     SpreadsheetApp: {
       getActive: () => ss, getActiveSpreadsheet: () => ss, flush() {},
+      getUi: () => ui,
       newDataValidation() { const dv = { list: null, allowInvalid: true }; const b = { requireValueInList(l, show) { dv.list = l; dv.show = show; return b; }, setAllowInvalid(x) { dv.allowInvalid = x; return b; }, build() { return dv; } }; return b; },
       newConditionalFormatRule() { const rule = { ranges: [] }; const b = { whenTextEqualTo(t) { rule.text = t; return b; }, setBackground(c) { rule.bg = c; return b; }, setFontColor(c) { rule.fc = c; return b; }, setRanges(r) { rule.ranges = r; return b; }, build() { return { getRanges: () => rule.ranges, rule }; } }; return b; },
+    },
+    HtmlService: {
+      // Reads apps-script/<name>.html like the real service, so a missing file fails the same way.
+      createHtmlOutputFromFile(name) {
+        const p = require('path').resolve(__dirname, '..', '..', 'apps-script', name + '.html');
+        if (!fs.existsSync(p)) throw new Error('Exception: No HTML file named ' + name + ' was found.');
+        const o = { content: fs.readFileSync(p, 'utf8'), title: '', setTitle(t) { o.title = t; return o; }, setWidth() { return o; }, getContent() { return o.content; } };
+        return o;
+      },
     },
     ContentService: { MimeType: { JSON: 'application/json' }, createTextOutput(s) { const o = { s, mime: null, setMimeType(m) { o.mime = m; return o; }, getContent() { return o.s; } }; return o; } },
     CacheService: { getScriptCache: () => cache },
@@ -149,7 +166,7 @@ function makeEnv(opts) {
   vm.createContext(ctx);
   let src = fs.readFileSync(CODE_PATH, 'utf8');
   if (opts.settings) src += '\n;Object.assign(SETTINGS, ' + JSON.stringify(opts.settings) + ');';
-  src += '\n;this.__exports = { doPost, doGet, setup, onEdit, cleanUpOldOrders, sendTestRequest, clean_, cell_, withinRateLimits_, takeConfirmationSlot_, writeOrder_, itemText_, sendEmails_, looksSensitive_, validate_, SETTINGS, ORDER_COLUMNS, ITEM_COLUMNS };';
+  src += '\n;this.__exports = { doPost, doGet, setup, onEdit, onOpen, openInvites, adminListInvites, adminAddInvite, adminSetInviteActive, adminSetSiteUrl, inviteLink_, siteUrl_, cleanUpOldOrders, sendTestRequest, clean_, cell_, withinRateLimits_, takeConfirmationSlot_, writeOrder_, itemText_, sendEmails_, looksSensitive_, validate_, SETTINGS, ORDER_COLUMNS, ITEM_COLUMNS, INVITE_COLUMNS };';
   vm.runInContext(src, ctx, { filename: 'Code.gs' });
   const X = ctx.__exports;
   return {

@@ -341,5 +341,75 @@ section('invites');
   ok(env.log.errors.length === 0 && env2.log.errors.length === 0 && env4.log.errors.length === 0, 'no errors in invite scenarios', [env.log.errors, env4.log.errors]);
 }
 
+// 10. invites panel: menu, sidebar, owner-only admin functions, JSON-safe state
+section('invites panel');
+{
+  const env = makeEnv(); env.X.setup();
+  const menu = env.log.menus[env.log.menus.length - 1];
+  ok(menu && menu.items.map(i => i[1]).join(',') === 'openInvites,sendTestRequest', 'menu opens the panel', menu && menu.items);
+  env.X.openInvites();
+  const side = env.log.sidebars[0];
+  ok(env.log.sidebars.length === 1 && side.title === 'Invites' && /google\.script\.run/.test(side.getContent()) && !/innerHTML/.test(side.getContent()), 'sidebar shows Invites.html (no innerHTML)');
+  let st = env.X.adminListInvites();
+  ok(Array.isArray(st.invites) && st.invites.length === 0 && st.siteUrl === '' && st.sharedCode === false && st.accepting === true, 'empty state', st);
+  // add
+  st = env.X.adminAddInvite('  Lopez   family ');
+  const first = st.invites[0];
+  ok(st.invites.length === 1 && first.name === 'Lopez family' && /^[0-9a-f]{24}$/.test(first.code) && st.added === first.code, 'add writes a row with a 24-hex code', first);
+  ok(first.link === '#invite=' + first.code && first.active === true && first.uses === 0 && first.lastUsed === '', 'new invite: hash-only link, on, unused', first);
+  const inv = env.sheet('Invites');
+  ok(inv.peek(2, 3).checkbox === true && inv.peek(3, 3) === undefined && inv.getRange(2, 1).getNumberFormats()[0][0] === '@', 'checkbox on that row only; name is plain text');
+  let threw = ''; try { env.X.adminAddInvite('   '); } catch (e) { threw = e.message; }
+  ok(/name/i.test(threw) && env.X.adminListInvites().invites.length === 1, 'empty name refused', threw);
+  env.X.adminAddInvite('=HYPERLINK("x")');
+  ok(inv.peek(3, 1).formula === null && String(inv.peek(3, 1).v).includes('HYPERLINK'), 'formula-looking name stays text', inv.peek(3, 1).v);
+  // page address
+  threw = ''; try { env.X.adminSetSiteUrl('ftp://nope'); } catch (e) { threw = e.message; }
+  ok(/https/.test(threw), 'non-https address refused', threw);
+  threw = ''; try { env.X.adminSetSiteUrl('me.github.io/ff-order-form'); } catch (e) { threw = e.message; }
+  ok(/https/.test(threw) && env.X.siteUrl_() === '', 'bare host refused, nothing stored', threw);
+  st = env.X.adminSetSiteUrl(' https://me.github.io/ff-order-form/#invite=old ');
+  ok(st.siteUrl === 'https://me.github.io/ff-order-form' && st.invites[0].link === 'https://me.github.io/ff-order-form/#invite=' + first.code, 'address saved without hash or trailing slash; links complete', [st.siteUrl, st.invites[0].link]);
+  ok(env.X.adminSetSiteUrl('http://localhost:8765/').siteUrl === 'http://localhost:8765' && env.X.inviteLink_('abc') === 'http://localhost:8765/#invite=abc', 'localhost allowed for trying things out');
+  env.X.adminSetSiteUrl('https://example.com/form/index.html');
+  ok(env.X.inviteLink_('abc') === 'https://example.com/form/index.html#invite=abc', 'no slash after a file name');
+  ok(env.X.adminSetSiteUrl('').siteUrl === '' && env.X.inviteLink_('abc') === '#invite=abc', 'address can be cleared');
+  env.X.adminSetSiteUrl('https://me.github.io/ff-order-form');
+  // switch off and on
+  ok(env.post(payload({ invite: first.code })).ok, 'new invite accepted by doPost');
+  st = env.X.adminSetInviteActive(2, first.code, false);
+  ok(st.invites[0].active === false && inv.getRange(2, 3).getValue() === false, 'switched off', st.invites[0]);
+  ok(env.post(payload({ invite: first.code })).error === 'invite', 'switched-off invite refused');
+  st = env.X.adminSetInviteActive('2', first.code.toUpperCase(), true);
+  ok(st.invites[0].active === true && env.post(payload({ invite: first.code })).ok, 'switched back on (row as a string, code case-insensitive)');
+  st = env.X.adminListInvites();
+  ok(st.invites[0].uses === 2 && /^\d{4}-\d{2}-\d{2}T/.test(st.invites[0].lastUsed), 'uses and last used (ISO string) in the view', st.invites[0]);
+  // stale-row guard
+  threw = ''; try { env.X.adminSetInviteActive(2, 'ffffffffffffffffffffffff', false); } catch (e) { threw = e.message; }
+  ok(/changed/.test(threw) && inv.getRange(2, 3).getValue() === true, 'code mismatch refused and nothing changed', threw);
+  threw = ''; try { env.X.adminSetInviteActive(9, first.code, false); } catch (e) { threw = e.message; }
+  ok(/Refresh/.test(threw), 'row past the end refused', threw);
+  threw = ''; try { env.X.adminSetInviteActive(1, first.code, false); } catch (e) { threw = e.message; }
+  ok(!!threw, 'header row refused');
+  // a row typed by hand in the tab (TRUE as text, no checkbox)
+  inv.getRange(4, 1, 1, 6).setValues([['Manual', 'manualmanualmanualmanual', 'TRUE', 0, '', '']]);
+  ok(env.post(payload({ invite: 'manualmanualmanualmanual' })).ok, 'hand-typed TRUE counts as active');
+  st = env.X.adminSetInviteActive(4, 'manualmanualmanualmanual', false);
+  ok(st.invites[2].active === false && inv.peek(4, 3).checkbox && env.post(payload({ invite: 'manualmanualmanualmanual' })).error === 'invite', 'hand-typed row gets a checkbox and switches off');
+  // google.script.run can't carry Dates: the state must be JSON-safe
+  const hasDate = v => v instanceof env.ctx.Date || v instanceof Date || (v && typeof v === 'object' && Object.values(v).some(hasDate));
+  ok(!hasDate(env.X.adminListInvites()) && !hasDate(env.X.adminAddInvite('Z')), 'panel state has no Date objects');
+  // a full tab grows
+  const envF = makeEnv({ maxRows: 3 }); envF.X.setup();
+  envF.X.adminAddInvite('A'); envF.X.adminAddInvite('B');
+  ok(envF.X.adminAddInvite('C').invites.length === 3 && envF.sheet('Invites').getMaxRows() > 3, 'adding past the last row grows the tab');
+  // the HTML file wasn't added: a helpful alert, no crash
+  const envM = makeEnv(); envM.X.setup();
+  envM.ctx.HtmlService.createHtmlOutputFromFile = () => { throw new Error('Exception: No HTML file named Invites was found.'); };
+  envM.X.openInvites();
+  ok(envM.log.sidebars.length === 0 && envM.log.alerts.length === 1 && /Invites\.html/.test(envM.log.alerts[0][1]), 'missing Invites.html explains what to do', envM.log.alerts[0]);
+  ok(env.log.errors.length === 0 && envF.log.errors.length === 0, 'no errors in panel scenarios', env.log.errors);
+}
+
 console.log('\nFAILS:', fails);
 process.exitCode = fails ? 1 : 0;

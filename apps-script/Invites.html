@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<!--
+  Friends & Family: the "Manage invites…" panel shown inside the Google Sheet.
+  In the Apps Script editor: + next to Files > HTML, name it "Invites", paste
+  this whole file. It talks to the admin* functions in Code.gs through
+  google.script.run, so it only works for someone who has the Sheet open.
+-->
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invites</title>
+<style>
+  :root {
+    --text: #1d1d1f; --muted: #6e6e73; --line: #e5e5ea; --fill: #f5f5f7;
+    --blue: #0071e3; --blue-press: #0061c3; --green: #34c759; --red: #d70015;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; color: var(--text); }
+  body {
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; padding: 14px 16px 24px;
+  }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 4px; }
+  p { margin: 0; }
+  .lead { color: var(--muted); margin-bottom: 14px; }
+  .muted { color: var(--muted); }
+  [hidden] { display: none !important; }
+
+  input[type="text"], input[type="url"] {
+    width: 100%; min-width: 0; height: 36px; padding: 0 12px; font: inherit; color: inherit;
+    background: var(--fill); border: 1px solid transparent; border-radius: var(--radius); outline: none;
+  }
+  input[type="text"]:focus, input[type="url"]:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0, 113, 227, .25); background: #fff; }
+  input[readonly] { color: var(--muted); }
+  .btn {
+    height: 36px; padding: 0 14px; font: inherit; font-weight: 600; border: 0; border-radius: var(--radius);
+    background: var(--fill); color: var(--text); cursor: pointer; white-space: nowrap;
+  }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.primary:active { background: var(--blue-press); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+  .btn.link { background: none; color: var(--blue); font-weight: 500; padding: 0; height: auto; }
+  .btn:focus-visible, .switch input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  .row { display: flex; gap: 8px; }
+  .row > input { flex: 1; }
+
+  .card { background: var(--fill); border-radius: 14px; padding: 12px; margin: 12px 0; }
+  .card strong { font-weight: 600; }
+  .card .row { margin-top: 8px; }
+  .card input { background: #fff; }
+
+  .status { margin: 10px 0 0; color: var(--muted); }
+  .status:empty { display: none; }
+  .status.error { color: var(--red); }
+
+  .list { list-style: none; margin: 6px 0 0; padding: 0; }
+  .inv {
+    display: grid; grid-template-columns: 1fr auto auto; grid-template-rows: auto auto; column-gap: 10px; align-items: center;
+    padding: 10px 0; border-top: 1px solid var(--line);
+  }
+  .inv:first-child { border-top: 0; }
+  .inv.off .name, .inv.off .meta { color: var(--muted); }
+  .inv.off .name { text-decoration: line-through; text-decoration-color: rgba(110, 110, 115, .5); }
+  .inv.new { animation: glow 1.6s ease-out; }
+  @keyframes glow { 0% { background: rgba(0, 113, 227, .12); } 100% { background: transparent; } }
+  .name { grid-column: 1; grid-row: 1; font-weight: 600; overflow-wrap: anywhere; }
+  .meta { grid-column: 1; grid-row: 2; font-size: 12px; color: var(--muted); }
+  .inv .copy { grid-column: 2; grid-row: 1 / span 2; }
+  .inv .switch { grid-column: 3; grid-row: 1 / span 2; }
+
+  .switch { position: relative; display: inline-block; width: 40px; height: 24px; }
+  .switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .switch span { position: absolute; inset: 0; background: #d1d1d6; border-radius: 12px; transition: background .2s; }
+  .switch span::after {
+    content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .25); transition: transform .2s;
+  }
+  .switch input:checked + span { background: var(--green); }
+  .switch input:checked + span::after { transform: translateX(16px); }
+  .switch input:disabled + span { opacity: .5; }
+
+  .foot { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; }
+  .foot p + p { margin-top: 6px; }
+  .site-cur { overflow-wrap: anywhere; }
+  .notice { font-size: 12px; margin-top: 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .inv.new { animation: none; }
+    .switch span, .switch span::after { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <h1>Invites</h1>
+  <p class="lead">One link per person or household. Send it by message. Switch an invite off to stop it working.</p>
+
+  <form id="add" class="row" autocomplete="off">
+    <input id="name" type="text" maxlength="80" placeholder="Who is it for? e.g. Lopez family" aria-label="Name for the new invite" required>
+    <button id="add-btn" type="submit" class="btn primary">Add</button>
+  </form>
+
+  <section id="share" class="card" hidden aria-live="polite">
+    <p><strong id="share-name"></strong> can open the form with this link.</p>
+    <div class="row">
+      <input id="share-link" type="text" readonly aria-label="Invite link">
+      <button id="share-copy" type="button" class="btn primary">Copy</button>
+    </div>
+  </section>
+
+  <section id="site" class="card" hidden>
+    <p id="site-lead">Add your page address so the links are complete.</p>
+    <form id="site-form" class="row" novalidate>
+      <input id="site-url" type="url" placeholder="https://you.github.io/ff-order-form/" aria-label="Page address">
+      <button type="submit" class="btn primary">Save</button>
+    </form>
+  </section>
+
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+
+  <ul id="list" class="list"></ul>
+  <p id="empty" class="muted" hidden>No invites yet. Add the first one above.</p>
+  <p id="shared" class="notice muted" hidden>A shared code from Code.gs is also accepted.</p>
+  <p id="paused" class="notice muted" hidden>New requests are paused (ACCEPTING in Code.gs).</p>
+
+  <footer class="foot">
+    <p class="muted">Each request records which invite it came from. Names and notes can be edited in the Invites tab.</p>
+    <p class="muted" id="site-foot" hidden>Page: <span id="site-cur" class="site-cur"></span> <button id="site-edit" type="button" class="btn link">Change</button></p>
+  </footer>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { invites: [], siteUrl: '' };
+  var busy = false;
+
+  function h(tag, props) {
+    var el = document.createElement(tag);
+    if (props) Object.keys(props).forEach(function (k) {
+      if (k === 'text') el.textContent = props[k];
+      else if (k === 'class') el.className = props[k];
+      else if (k in el && k !== 'type') el[k] = props[k];
+      else el.setAttribute(k, props[k]);
+    });
+    for (var i = 2; i < arguments.length; i++) if (arguments[i] != null) el.appendChild(arguments[i]);
+    return el;
+  }
+
+  // google.script.run as a promise. Falls back to a stub outside Apps Script.
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      var run = window.google && google.script && google.script.run;
+      if (!run) { reject(new Error('Not running inside Google Sheets.')); return; }
+      var r = run.withSuccessHandler(resolve).withFailureHandler(function (err) {
+        reject(err instanceof Error ? err : new Error(String(err && err.message || err)));
+      });
+      r[fn].apply(r, args);
+    });
+  }
+
+  function setStatus(msg, isError) {
+    var el = $('status');
+    el.textContent = msg || '';
+    el.classList.toggle('error', !!isError);
+  }
+
+  function setBusy(on) {
+    busy = on;
+    $('add-btn').disabled = on;
+    $('name').disabled = on;
+  }
+
+  function whenUsed(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    try { return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return d.toDateString(); }
+  }
+
+  function metaText(inv) {
+    if (!inv.active) return 'Off' + (inv.uses ? ' · ' + inv.uses + (inv.uses === 1 ? ' request' : ' requests') : '');
+    if (!inv.uses) return 'No requests yet';
+    var when = whenUsed(inv.lastUsed);
+    return inv.uses + (inv.uses === 1 ? ' request' : ' requests') + (when ? ' · last ' + when : '');
+  }
+
+  function render(next, addedCode) {
+    if (next) state = next;
+    var list = $('list');
+    while (list.firstChild) list.removeChild(list.firstChild);
+    state.invites.forEach(function (inv) {
+      var toggle = h('input', { type: 'checkbox', checked: !!inv.active, 'aria-label': (inv.active ? 'Switch off ' : 'Switch on ') + inv.name });
+      toggle.addEventListener('change', function () { onToggle(inv, toggle); });
+      var copy = h('button', { type: 'button', class: 'btn small copy', text: 'Copy link', 'aria-label': 'Copy the link for ' + inv.name });
+      copy.addEventListener('click', function () { copyLink(inv, copy); });
+      var li = h('li', { class: 'inv' + (inv.active ? '' : ' off') + (inv.code === addedCode ? ' new' : ''), 'data-row': inv.row, 'data-code': inv.code },
+        h('div', { class: 'name', text: inv.name || 'Unnamed' }),
+        h('div', { class: 'meta', text: metaText(inv) }),
+        copy,
+        h('label', { class: 'switch' }, toggle, h('span')));
+      list.appendChild(li);
+    });
+    $('empty').hidden = state.invites.length > 0;
+    $('shared').hidden = !state.sharedCode;
+    $('paused').hidden = state.accepting !== false;
+    // Page address: ask for it up front while missing, otherwise keep it in the footer.
+    var has = !!state.siteUrl;
+    $('site').hidden = has && !$('site').getAttribute('data-editing');
+    $('site-foot').hidden = !has;
+    $('site-cur').textContent = state.siteUrl;
+    if (has) $('site-url').value = state.siteUrl;
+    $('site-lead').textContent = has ? 'The links are built from this address.' : 'Add your page address so the links are complete.';
+    // The share card follows its invite: new address or name, or gone if the row went.
+    var shareCode = $('share').getAttribute('data-code');
+    if (shareCode) {
+      var cur = state.invites.filter(function (x) { return x.code === shareCode; })[0];
+      if (cur) { $('share-name').textContent = cur.name; $('share-link').value = cur.link; }
+      else { $('share').hidden = true; $('share').removeAttribute('data-code'); }
+    }
+  }
+
+  function showShare(inv) {
+    $('share').setAttribute('data-code', inv.code);
+    $('share-name').textContent = inv.name;
+    $('share-link').value = inv.link;
+    $('share').hidden = false;
+    $('share-copy').textContent = 'Copy';
+  }
+
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return legacyCopy(text); });
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+  function flash(btn, text) {
+    var was = btn.textContent;
+    btn.textContent = text;
+    setTimeout(function () { btn.textContent = was; }, 1600);
+  }
+  function copyLink(inv, btn) {
+    copyText(inv.link).then(function (ok) {
+      if (ok) { flash(btn, 'Copied'); setStatus(''); return; }
+      // Clipboard blocked: show the link selected so it can be copied by hand.
+      showShare(inv);
+      $('share-link').focus();
+      $('share-link').select();
+      setStatus('Select the link and copy it.', false);
+    });
+  }
+
+  function onToggle(inv, toggle) {
+    var want = toggle.checked;
+    toggle.disabled = true;
+    setStatus('');
+    call('adminSetInviteActive', inv.row, inv.code, want).then(function (next) {
+      render(next);
+      setStatus(want ? inv.name + ' is on.' : inv.name + ' is off. Their link no longer works.');
+    }, function (err) {
+      toggle.checked = !want;
+      toggle.disabled = false;
+      setStatus(err.message, true);
+      load();
+    });
+  }
+
+  // Refreshes the list. Leaves the status line alone so an explanation stays readable.
+  function load() {
+    return call('adminListInvites').then(function (next) { render(next); }, function (err) {
+      setStatus(err.message, true);
+    });
+  }
+
+  $('add').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (busy) return;
+    var name = $('name').value.replace(/\s+/g, ' ').trim();
+    if (!name) { $('name').focus(); return; }
+    setBusy(true);
+    setStatus('Adding…');
+    call('adminAddInvite', name).then(function (next) {
+      setBusy(false);
+      $('name').value = '';
+      render(next, next.added);
+      var added = next.invites.filter(function (x) { return x.code === next.added; })[0];
+      if (added) showShare(added);
+      setStatus(next.siteUrl ? '' : 'Add the page address below to get a complete link.', !next.siteUrl);
+      $('name').focus();
+    }, function (err) {
+      setBusy(false);
+      setStatus(err.message, true);
+      $('name').focus();
+    });
+  });
+
+  $('share-copy').addEventListener('click', function () {
+    var btn = $('share-copy');
+    copyText($('share-link').value).then(function (ok) {
+      if (ok) flash(btn, 'Copied');
+      else { $('share-link').focus(); $('share-link').select(); setStatus('Select the link and copy it.', false); }
+    });
+  });
+
+  $('site-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var url = $('site-url').value.trim();
+    var btn = e.target.querySelector('button');
+    btn.disabled = true;
+    call('adminSetSiteUrl', url).then(function (next) {
+      btn.disabled = false;
+      $('site').removeAttribute('data-editing');
+      render(next);
+      setStatus(next.siteUrl ? 'Page address saved.' : 'Page address cleared.');
+    }, function (err) {
+      btn.disabled = false;
+      setStatus(err.message, true);
+      $('site-url').focus();
+    });
+  });
+
+  $('site-edit').addEventListener('click', function () {
+    $('site').setAttribute('data-editing', '1');
+    $('site').hidden = false;
+    $('site-url').focus();
+    $('site-url').select();
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

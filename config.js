@@ -11,7 +11,7 @@ window.FF_CONFIG = {
   endpoint: '',
 
   // When true, the page is locked until a valid invite is opened or entered.
-  // Invites live in your Google Sheet (menu Friends & Family > Add an invite…),
+  // Invites live in your Google Sheet (menu Friends & Family > Manage invites…),
   // which gives each person a link like https://your-site/#invite=CODE. Nothing
   // secret goes in this file. Leave false while trying things out.
   inviteCodeRequired: false,

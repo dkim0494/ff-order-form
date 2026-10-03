@@ -16,6 +16,7 @@ A clean, Apple-style order request page that replaces the Google Form. People pi
 | `data/catalog.js` | Products and options (Apple lineup as of October 2026) | Once a year |
 | `data/world.js` | Countries, address formats, Apple Store list | Rarely |
 | `apps-script/Code.gs` | The backend you paste into your Google Sheet | Settings at the top |
+| `apps-script/Invites.html` | The "Manage invites…" panel, pasted into the same script | No |
 | `_headers` | Optional security headers for Netlify or Cloudflare Pages | No |
 | `.github/workflows/pages.yml`, `.nojekyll` | Publishes the page on GitHub Pages on every push | No |
 | `tests/` | Automated checks for development (`npm install --prefix tests`, then `npm test --prefix tests`) | No; not needed online |
@@ -28,7 +29,8 @@ A clean, Apple-style order request page that replaces the Google Form. People pi
 1. Create a new Google Sheet, for example "F&F Orders". Start fresh rather than reusing the old Form responses sheet, because the columns are different.
 2. In the Sheet, open **Extensions > Apps Script**.
 3. Delete what's there, paste in all of `apps-script/Code.gs`, and click **Save**.
-4. In the function dropdown, pick **setup** and click **Run**. Google asks you to authorize it. Because the script is yours, you'll see an "unverified app" warning: click **Advanced**, then **Go to (project name)**. The script can only touch this one spreadsheet. It creates the **Orders** and **Items** tabs.
+4. Click **+** next to **Files**, choose **HTML**, name it `Invites`, replace its contents with all of `apps-script/Invites.html`, and click **Save**. This is the invites panel (step 4 below).
+5. In the function dropdown, pick **setup** and click **Run**. Google asks you to authorize it. Because the script is yours, you'll see an "unverified app" warning: click **Advanced**, then **Go to (project name)**. The script can only touch this one spreadsheet. It creates the **Orders**, **Items** and **Invites** tabs.
 
 ### 2. Deploy it as a web app
 
@@ -44,12 +46,13 @@ Open `config.js` and paste the URL into `endpoint: ''`. While it's empty, the pa
 
 ### 4. Decide who can send requests (recommended)
 
-The page address is public, so lock submissions to the people you invite. Invites live in your Sheet, one per person or household, and each one is a link.
+The page address is public, so lock submissions to the people you invite. Invites live in your Sheet, one per person or household, and each one is a link. You manage them from a panel inside the Sheet; nobody else can open it, because nobody else has the Sheet.
 
-1. Open the Sheet. After `setup()` ran once you'll see a **Friends & Family** menu (reload the Sheet if it isn't there yet). Choose **Add an invite…**, type a name such as "Lopez family", and copy the link it shows. Each invite is a row in the **Invites** tab: name, code, an **Active** box, how many requests used it, and when.
-2. In `Code.gs`, set `SITE_URL` to your page address so the links are complete, and in `config.js` set `inviteCodeRequired: true`. Deploy a new version of the script (see "Updating the backend later").
-3. Send each person their own link. The page checks the invite before showing anything, so a wrong or revoked link is caught up front. Every request in the Orders tab shows which invite it came from.
-4. To cut someone off, untick **Active** on their row. To let someone back in, tick it again or add a new invite.
+1. Open the Sheet. After `setup()` ran once you'll see a **Friends & Family** menu (reload the Sheet if it isn't there yet). Choose **Manage invites…**. A panel opens on the right.
+2. The first time, the panel asks for your page address (the one from step 5). Paste it and click **Save**. It's stored with the script, so no code edit or redeploy is needed.
+3. Type a name such as "Lopez family" and click **Add**. The panel shows the link; click **Copy** and send it to them by message. Repeat for each person or household.
+4. In `config.js`, set `inviteCodeRequired: true` and publish the page (step 5). From then on the page checks the invite before showing anything, so a wrong or revoked link is caught up front. Every request in the Orders tab shows which invite it came from.
+5. To cut someone off, flip their switch off in the panel. Flip it back on to let them back in. The panel also shows how many requests each invite has sent and when it was last used. The same data is in the **Invites** tab, where you can edit names and add notes.
 
 `INVITE_CODE` in `Code.gs` is still there as an optional shared code that always works. With no invites and no code, anyone with the address can submit, which is fine while you try things out.
 
@@ -74,7 +77,7 @@ The folder is a git repository with a deploy workflow included, so publishing is
 
    Without the CLI: create an empty repository on github.com, then run `git remote add origin <its URL>` and `git push -u origin main`. GitHub Pages on a free account needs a public repository; that's fine, because nothing secret lives in these files (invites live in your Sheet; the backend URL is visible to anyone who opens the page anyway).
 2. Watch the **Actions** tab. The "Deploy to GitHub Pages" run takes about a minute and prints the address, normally `https://YOUR-USER.github.io/ff-order-form/`. If the first run stops with a Pages permission error, open **Settings > Pages**, set **Source** to **GitHub Actions**, and re-run it (or run `gh api -X POST repos/YOUR-USER/ff-order-form/pages -f build_type=workflow` once).
-3. Put that address into `SITE_URL` in `Code.gs` (so invite links are complete) and deploy a new version of the script.
+3. Paste that address into the invites panel (**Friends & Family > Manage invites…**) so the links are complete.
 4. Share invite links (section 4).
 
 **Updating later:** edit, then
@@ -89,7 +92,7 @@ Any other static host works too: Netlify Drop (drag the folder onto app.netlify.
 
 ### Updating the backend later
 
-After editing `Code.gs`, go to **Deploy > Manage deployments**, click the pencil icon, pick **New version**, and click **Deploy**. The URL stays the same.
+After editing `Code.gs`, go to **Deploy > Manage deployments**, click the pencil icon, pick **New version**, and click **Deploy**. The URL stays the same. Changes to `Invites.html` (the panel) take effect as soon as you save; the panel isn't part of the web app.
 
 ## Day to day
 

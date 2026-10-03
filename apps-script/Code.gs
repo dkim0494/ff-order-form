@@ -12,15 +12,13 @@
  */
 
 const SETTINGS = {
-  // Who may send requests: one invite per person or household, managed in the
-  // "Invites" tab (menu Friends & Family > Add an invite…). Each invite is a link
-  // like https://your-site/#invite=CODE; untick Active to revoke one.
-  // INVITE_CODE is an optional extra shared code that always works (leave '' to
-  // rely on the tab alone). With no invites and no code, anyone can submit.
+  // Who may send requests: one invite per person or household, managed from the
+  // Sheet menu Friends & Family > Manage invites… (the Invites tab holds them).
+  // Each invite is a link like https://your-site/#invite=CODE; switch it off to
+  // revoke it. INVITE_CODE is an optional extra shared code that always works
+  // (leave '' to rely on invites alone). With no invites and no code, anyone can
+  // submit. The page address used in the links is set in the same panel.
   INVITE_CODE: '',
-
-  // The public address of the page, used to build the links that "Add an invite…" shows.
-  SITE_URL: '',
 
   // Set to false to pause new requests (people see a friendly message).
   ACCEPTING: true,
@@ -331,7 +329,11 @@ function inviteRows_() {
   const sheet = SpreadsheetApp.getActive().getSheetByName(INVITES_SHEET);
   if (!sheet || sheet.getLastRow() < 2) return [];
   return sheet.getRange(2, 1, sheet.getLastRow() - 1, INVITE_COLUMNS.length).getValues().map(function (r, i) {
-    return { row: i + 2, name: String(r[0] || '').trim(), code: String(r[1] || '').trim(), active: r[2] === true || String(r[2]).trim().toUpperCase() === 'TRUE', uses: Number(r[3]) || 0 };
+    return {
+      row: i + 2, name: String(r[0] || '').trim(), code: String(r[1] || '').trim(),
+      active: r[2] === true || String(r[2]).trim().toUpperCase() === 'TRUE',
+      uses: Number(r[3]) || 0, lastUsed: r[4], notes: String(r[5] || '').trim(),
+    };
   }).filter(function (x) { return x.code; });
 }
 // { ok, name, row } for an accepted code; { ok: true, open: true } when nothing is configured.
@@ -361,32 +363,112 @@ function newInviteCode_() {
   return (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '').slice(0, 24).toLowerCase();
 }
 function inviteLink_(code) {
-  const base = String(SETTINGS.SITE_URL || '').trim().replace(/\/+$/, '');
-  return (base ? base + '/' : '') + '#invite=' + code;
+  const base = siteUrl_();
+  return (base ? base + (/\.html?$/i.test(base) ? '' : '/') : '') + '#invite=' + code;
 }
-// Sheet menu: Friends & Family > Add an invite…
+// The page address is stored in script properties by the invites panel, so it
+// never needs a code edit or a new deployment.
+function siteUrl_() {
+  let url = '';
+  try { url = PropertiesService.getScriptProperties().getProperty('siteUrl') || ''; } catch (err) { /* no properties in some contexts */ }
+  return String(url).trim().replace(/\/+$/, '');
+}
+
+/* ======================================================= invites panel */
+// Everything below runs only for whoever has the Sheet open (google.script.run
+// from the sidebar), never through the web app, so it is owner-only as long as
+// the Sheet is private. Return values must be JSON-safe: no Date objects.
+
+// Sheet menu: Friends & Family > Manage invites…
 function onOpen() {
   try {
     SpreadsheetApp.getUi().createMenu('Friends & Family')
-      .addItem('Add an invite…', 'addInvite')
+      .addItem('Manage invites…', 'openInvites')
       .addItem('Send a test request', 'sendTestRequest')
       .addToUi();
   } catch (err) { /* no UI when run from a trigger */ }
 }
-function addInvite() {
+
+function openInvites() {
   const ui = SpreadsheetApp.getUi();
-  const res = ui.prompt('Add an invite', 'Who is it for? For example "Lopez family" or "Uncle Ben".', ui.ButtonSet.OK_CANCEL);
-  if (res.getSelectedButton() !== ui.Button.OK) return;
-  const name = String(res.getResponseText() || '').trim().slice(0, 80);
-  if (!name) return;
-  const sheet = ensureSheet_(SpreadsheetApp.getActive(), INVITES_SHEET, INVITE_COLUMNS);
-  const code = newInviteCode_();
-  const row = sheet.getLastRow() + 1;
-  sheet.getRange(row, 1, 1, INVITE_COLUMNS.length).setNumberFormats([['@', '@', 'General', '0', 'yyyy-mm-dd hh:mm', '@']])
-    .setValues([[name, code, true, 0, '', '']]);
-  sheet.getRange(row, INVITE_COLUMNS.indexOf('Active') + 1).insertCheckboxes();
-  const link = inviteLink_(code);
-  ui.alert('Invite for ' + name, 'Share this link:\n\n' + link + (SETTINGS.SITE_URL ? '' : '\n\n(Set SITE_URL in Code.gs to get full links.)') + '\n\nTo revoke it, untick Active in the Invites tab.', ui.ButtonSet.OK);
+  let html;
+  try {
+    html = HtmlService.createHtmlOutputFromFile('Invites');
+  } catch (err) {
+    ui.alert('One more file is needed',
+      'In the Apps Script editor, click + next to Files, choose HTML, name it "Invites" and paste in apps-script/Invites.html from the project. Save, then try again.',
+      ui.ButtonSet.OK);
+    return;
+  }
+  ui.showSidebar(html.setTitle('Invites'));
+}
+
+function inviteView_(r) {
+  return {
+    row: r.row, name: r.name, code: r.code, active: !!r.active, uses: r.uses || 0,
+    lastUsed: r.lastUsed instanceof Date ? r.lastUsed.toISOString() : String(r.lastUsed || ''),
+    notes: r.notes || '', link: inviteLink_(r.code),
+  };
+}
+
+// The panel's whole state in one call.
+function adminListInvites() {
+  ensureSheet_(SpreadsheetApp.getActive(), INVITES_SHEET, INVITE_COLUMNS);
+  return {
+    invites: inviteRows_().map(inviteView_),
+    siteUrl: siteUrl_(),
+    sharedCode: !!SETTINGS.INVITE_CODE,
+    accepting: !!SETTINGS.ACCEPTING,
+  };
+}
+
+function adminAddInvite(name) {
+  name = clean_(name, 80).replace(/\s+/g, ' ');
+  if (!name) throw new Error('Type a name first.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const sheet = ensureSheet_(SpreadsheetApp.getActive(), INVITES_SHEET, INVITE_COLUMNS);
+    const code = newInviteCode_();
+    const row = sheet.getLastRow() + 1;
+    if (row > sheet.getMaxRows()) sheet.insertRowsAfter(sheet.getMaxRows(), 100);
+    sheet.getRange(row, 1, 1, INVITE_COLUMNS.length)
+      .setNumberFormats([['@', '@', 'General', '0', 'yyyy-mm-dd hh:mm', '@']])
+      .setValues([[cell_(name), code, true, 0, '', '']]);
+    // On this row only: checkbox cells count as content for getLastRow().
+    sheet.getRange(row, INVITE_COLUMNS.indexOf('Active') + 1).insertCheckboxes();
+    SpreadsheetApp.flush();
+    const state = adminListInvites();
+    state.added = code;
+    return state;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Switch an invite on or off. The code must still be on that row, so a row
+// deleted or moved in the tab meanwhile can't flip the wrong person.
+function adminSetInviteActive(row, code, active) {
+  row = parseInt(row, 10);
+  const sheet = SpreadsheetApp.getActive().getSheetByName(INVITES_SHEET);
+  if (!sheet || !(row >= 2) || row > sheet.getLastRow()) throw new Error('That invite isn’t in the Invites tab any more. Refresh the panel.');
+  const current = sheet.getRange(row, INVITE_COLUMNS.indexOf('Code') + 1).getValue();
+  if (!sameCode_(current, code)) throw new Error('The Invites tab changed. Refresh the panel and try again.');
+  const cell = sheet.getRange(row, INVITE_COLUMNS.indexOf('Active') + 1);
+  cell.insertCheckboxes();
+  cell.setValue(!!active);
+  SpreadsheetApp.flush();
+  return adminListInvites();
+}
+
+function adminSetSiteUrl(url) {
+  url = clean_(url, 300).replace(/[?#].*$/, '').replace(/\/+$/, '');
+  if (url && !/^(https:\/\/[^\s/]+|http:\/\/(localhost|127\.0\.0\.1)(:\d+)?)(\/[^\s]*)?$/i.test(url)) {
+    throw new Error('Enter the page’s full address, starting with https://');
+  }
+  const props = PropertiesService.getScriptProperties();
+  if (url) props.setProperty('siteUrl', url); else props.deleteProperty('siteUrl');
+  return adminListInvites();
 }
 
 function sameCode_(a, b) {
@@ -765,7 +847,7 @@ function setup() {
   if (leftover && leftover.getLastRow() === 0 && ss.getSheets().length > 2) ss.deleteSheet(leftover);
 
   onOpen();
-  console.log('Setup complete. Next: Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone). Copy the /exec URL into config.js. Then add invites from the Friends & Family menu.');
+  console.log('Setup complete. Next: Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone). Copy the /exec URL into config.js. Then open Friends & Family > Manage invites… in the Sheet.');
 }
 
 // Optional: run from the editor to check everything end to end.
