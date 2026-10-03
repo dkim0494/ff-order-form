@@ -186,6 +186,16 @@ function open(env, opts = {}) {
   for (const l of Q.logs) problems.push('console (blocked clipboard): ' + l.join(' ').slice(0, 300));
   Q.w.close();
 
+  // Google's multi-account failure gets a hint on top of the raw message.
+  {
+    const env3 = makeEnv(); env3.X.setup();
+    env3.X.adminListInvites = () => { throw new Error('We\'re sorry, a server error occurred while reading from storage. Error code PERMISSION_DENIED.'); };
+    const R = open(env3);
+    await R.wait();
+    expect(R.$('#status').classList.contains('error') && /PERMISSION_DENIED/.test(R.$('#status').textContent) && /more than one Google account/.test(R.$('#status').textContent), 'storage permission error explained', R.$('#status').textContent);
+    R.w.close();
+  }
+
   // Outside Google Sheets (file opened directly) the panel explains instead of breaking.
   {
     const vc = new VirtualConsole(); const logs = [];

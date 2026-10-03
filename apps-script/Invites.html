@@ -164,6 +164,17 @@
     });
   }
 
+  // Google's own failure text, with a hint for the one cause that isn't obvious:
+  // a sidebar call runs under the browser's default Google account, so with
+  // several accounts signed in it can hit the Sheet as the wrong person.
+  function explain(err) {
+    var m = String(err && err.message || err || 'Something went wrong.');
+    if (/PERMISSION_DENIED|reading from storage|do not have permission/i.test(m)) {
+      return m + ' This usually means the browser is signed in to more than one Google account. Open the Sheet in a window signed in only to the account that owns it, then reopen the panel.';
+    }
+    return m;
+  }
+
   function setStatus(msg, isError) {
     var el = $('status');
     el.textContent = msg || '';
@@ -275,7 +286,7 @@
     }, function (err) {
       toggle.checked = !want;
       toggle.disabled = false;
-      setStatus(err.message, true);
+      setStatus(explain(err), true);
       load();
     });
   }
@@ -283,7 +294,7 @@
   // Refreshes the list. Leaves the status line alone so an explanation stays readable.
   function load() {
     return call('adminListInvites').then(function (next) { render(next); }, function (err) {
-      setStatus(err.message, true);
+      setStatus(explain(err), true);
     });
   }
 
@@ -304,7 +315,7 @@
       $('name').focus();
     }, function (err) {
       setBusy(false);
-      setStatus(err.message, true);
+      setStatus(explain(err), true);
       $('name').focus();
     });
   });
@@ -329,7 +340,7 @@
       setStatus(next.siteUrl ? 'Page address saved.' : 'Page address cleared.');
     }, function (err) {
       btn.disabled = false;
-      setStatus(err.message, true);
+      setStatus(explain(err), true);
       $('site-url').focus();
     });
   });

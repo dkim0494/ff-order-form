@@ -14,7 +14,7 @@ window.FF_CONFIG = {
   // Invites live in your Google Sheet (menu Friends & Family > Manage invites…),
   // which gives each person a link like https://your-site/#invite=CODE. Nothing
   // secret goes in this file. Leave false while trying things out.
-  inviteCodeRequired: false,
+  inviteCodeRequired: true,
 
   // Two-letter country code to start in. Empty = guess from the browser.
   defaultCountry: '',
