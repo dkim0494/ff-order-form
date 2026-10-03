@@ -53,7 +53,9 @@ function make(opts = {}) {
   const run = code => { const s = w.document.createElement('script'); s.textContent = code; w.document.body.appendChild(s); };
   let config = SRC.config;
   run(config);
-  if (opts.config) w.FF_CONFIG = Object.assign(w.FF_CONFIG, opts.config);
+  // Tests must not depend on the owner's settings: always preview mode and no
+  // gate unless a test asks for them.
+  w.FF_CONFIG = Object.assign(w.FF_CONFIG, { endpoint: '', inviteCodeRequired: false }, opts.config || {});
   run(SRC.world);
   run(opts.catalogSrc || SRC.catalog);
   if (opts.mutate) opts.mutate(w);
