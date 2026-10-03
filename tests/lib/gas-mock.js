@@ -8,7 +8,7 @@ const CODE_PATH = require('path').resolve(__dirname, '..', '..', 'apps-script', 
 
 function makeEnv(opts) {
   opts = Object.assign({ maxRows: 1000, maxCols: 26, apostropheLiteralInText: true, mailQuota: 100, owner: 'owner@example.com', settings: null }, opts || {});
-  const log = { mails: [], errors: [], cachePuts: [], triggers: [], menus: [], alerts: [], sidebars: [] };
+  const log = { mails: [], errors: [], cachePuts: [], triggers: [], menus: [], alerts: [], sidebars: [], prompts: [], promptAnswers: [] };
 
   class Cell { constructor() { this.v = ''; this.fmt = null; this.formula = null; this.dv = null; this.checkbox = false; } }
 
@@ -113,6 +113,8 @@ function makeEnv(opts) {
   const ui = {
     ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' }, Button: { OK: 'OK', CANCEL: 'CANCEL' },
     alert(...a) { log.alerts.push(a); },
+    // Scripted answers: push { button: 'OK'|'CANCEL', text } onto log.promptAnswers before the call.
+    prompt(title, msg) { const a = log.promptAnswers.shift() || { button: 'CANCEL', text: '' }; log.prompts.push([title, msg]); return { getSelectedButton: () => a.button, getResponseText: () => a.text }; },
     showSidebar(html) { log.sidebars.push(html); },
     createMenu(name) { const m = { name, items: [], addItem(label, fn) { m.items.push([label, fn]); return m; }, addToUi() { log.menus.push(m); } }; return m; },
   };
@@ -166,7 +168,7 @@ function makeEnv(opts) {
   vm.createContext(ctx);
   let src = fs.readFileSync(CODE_PATH, 'utf8');
   if (opts.settings) src += '\n;Object.assign(SETTINGS, ' + JSON.stringify(opts.settings) + ');';
-  src += '\n;this.__exports = { doPost, doGet, setup, onEdit, onOpen, openInvites, adminListInvites, adminAddInvite, adminSetInviteActive, adminSetSiteUrl, inviteLink_, siteUrl_, cleanUpOldOrders, sendTestRequest, clean_, cell_, withinRateLimits_, takeConfirmationSlot_, writeOrder_, itemText_, sendEmails_, looksSensitive_, validate_, SETTINGS, ORDER_COLUMNS, ITEM_COLUMNS, INVITE_COLUMNS };';
+  src += '\n;this.__exports = { doPost, doGet, setup, onEdit, onOpen, openInvites, addInvite, adminListInvites, adminAddInvite, adminSetInviteActive, adminSetSiteUrl, inviteLink_, siteUrl_, cleanUpOldOrders, sendTestRequest, clean_, cell_, withinRateLimits_, takeConfirmationSlot_, writeOrder_, itemText_, sendEmails_, looksSensitive_, validate_, SETTINGS, ORDER_COLUMNS, ITEM_COLUMNS, INVITE_COLUMNS };';
   vm.runInContext(src, ctx, { filename: 'Code.gs' });
   const X = ctx.__exports;
   return {

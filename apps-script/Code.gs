@@ -379,14 +379,37 @@ function siteUrl_() {
 // from the sidebar), never through the web app, so it is owner-only as long as
 // the Sheet is private. Return values must be JSON-safe: no Date objects.
 
-// Sheet menu: Friends & Family > Manage invites…
+// Sheet menu: Friends & Family > Manage invites… / Add an invite… / Send a test request
 function onOpen() {
   try {
     SpreadsheetApp.getUi().createMenu('Friends & Family')
       .addItem('Manage invites…', 'openInvites')
+      .addItem('Add an invite…', 'addInvite')
       .addItem('Send a test request', 'sendTestRequest')
       .addToUi();
   } catch (err) { /* no UI when run from a trigger */ }
+}
+
+// The panel's Add, through plain dialogs. Menu items run as the person who has
+// the Sheet open, so this works where the panel can't reach the script: Safari
+// and private windows block the third-party cookies the sidebar needs, and a
+// browser signed in to several Google accounts may call as the wrong one.
+function addInvite() {
+  const ui = SpreadsheetApp.getUi();
+  try {
+    if (!siteUrl_()) {
+      const site = ui.prompt('Page address', 'The public address of the order page, for example https://you.github.io/ff-order-form/. It is kept for every link from now on.', ui.ButtonSet.OK_CANCEL);
+      if (site.getSelectedButton() !== ui.Button.OK) return;
+      adminSetSiteUrl(site.getResponseText());
+    }
+    const res = ui.prompt('Add an invite', 'Who is it for? For example "Lopez family" or "Uncle Ben".', ui.ButtonSet.OK_CANCEL);
+    if (res.getSelectedButton() !== ui.Button.OK) return;
+    const state = adminAddInvite(res.getResponseText());
+    const inv = state.invites.filter(function (x) { return x.code === state.added; })[0];
+    ui.alert('Invite for ' + inv.name, 'Share this link:\n\n' + inv.link + '\n\nTo stop it working, untick Active on their row in the Invites tab.', ui.ButtonSet.OK);
+  } catch (err) {
+    ui.alert('Couldn’t add the invite', String(err && err.message || err), ui.ButtonSet.OK);
+  }
 }
 
 function openInvites() {

@@ -54,6 +54,8 @@ The page address is public, so lock submissions to the people you invite. Invite
 4. In `config.js`, set `inviteCodeRequired: true` and publish the page (step 5). From then on the page checks the invite before showing anything, so a wrong or revoked link is caught up front. Every request in the Orders tab shows which invite it came from.
 5. To cut someone off, flip their switch off in the panel. Flip it back on to let them back in. The panel also shows how many requests each invite has sent and when it was last used. The same data is in the **Invites** tab, where you can edit names and add notes.
 
+If the panel shows "a server error occurred while reading from storage" or a permission error, your browser didn't send your Google sign-in with the panel's requests. Safari and private windows block the cookies it needs, and a browser signed in to several Google accounts may use the wrong one. Either open the Sheet in a normal Chrome window signed in only to the owning account, or use **Friends & Family > Add an invite…**, which does the same through plain dialogs and works everywhere (it asks for the page address the first time). Revoking stays the **Active** box in the Invites tab.
+
 `INVITE_CODE` in `Code.gs` is still there as an optional shared code that always works. With no invites and no code, anyone with the address can submit, which is fine while you try things out.
 
 #### Keep the Sheet private

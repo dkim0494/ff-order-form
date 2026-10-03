@@ -346,7 +346,7 @@ section('invites panel');
 {
   const env = makeEnv(); env.X.setup();
   const menu = env.log.menus[env.log.menus.length - 1];
-  ok(menu && menu.items.map(i => i[1]).join(',') === 'openInvites,sendTestRequest', 'menu opens the panel', menu && menu.items);
+  ok(menu && menu.items.map(i => i[1]).join(',') === 'openInvites,addInvite,sendTestRequest', 'menu: panel, dialog fallback, test request', menu && menu.items);
   env.X.openInvites();
   const side = env.log.sidebars[0];
   ok(env.log.sidebars.length === 1 && side.title === 'Invites' && /google\.script\.run/.test(side.getContent()) && !/innerHTML/.test(side.getContent()), 'sidebar shows Invites.html (no innerHTML)');
@@ -408,7 +408,23 @@ section('invites panel');
   envM.ctx.HtmlService.createHtmlOutputFromFile = () => { throw new Error('Exception: No HTML file named Invites was found.'); };
   envM.X.openInvites();
   ok(envM.log.sidebars.length === 0 && envM.log.alerts.length === 1 && /Invites\.html/.test(envM.log.alerts[0][1]), 'missing Invites.html explains what to do', envM.log.alerts[0]);
-  ok(env.log.errors.length === 0 && envF.log.errors.length === 0, 'no errors in panel scenarios', env.log.errors);
+  // Add an invite… through dialogs (for browsers where the panel can't call the script).
+  const envD = makeEnv(); envD.X.setup();
+  envD.log.promptAnswers.push({ button: 'CANCEL', text: '' });
+  envD.X.addInvite();
+  ok(envD.log.prompts.length === 1 && /Page address/.test(envD.log.prompts[0][0]) && envD.log.alerts.length === 0 && envD.X.adminListInvites().invites.length === 0, 'asks for the page address first; cancel adds nothing');
+  envD.log.promptAnswers.push({ button: 'OK', text: ' https://me.github.io/ff-order-form/ ' }, { button: 'OK', text: 'Lopez family' });
+  envD.X.addInvite();
+  const dl = envD.X.adminListInvites();
+  ok(dl.siteUrl === 'https://me.github.io/ff-order-form' && dl.invites.length === 1 && dl.invites[0].name === 'Lopez family', 'dialog flow stores the address and the invite', dl);
+  ok(envD.log.alerts.length === 1 && envD.log.alerts[0][1].includes(dl.invites[0].link) && /Invites tab/.test(envD.log.alerts[0][1]), 'alert shows the link', envD.log.alerts[0]);
+  envD.log.promptAnswers.push({ button: 'OK', text: 'Uncle Ben' });
+  envD.X.addInvite();
+  ok(envD.log.prompts.length === 4 && envD.X.adminListInvites().invites.length === 2, 'address not asked again once stored');
+  envD.log.promptAnswers.push({ button: 'OK', text: '   ' });
+  envD.X.addInvite();
+  ok(envD.log.alerts.length === 3 && /Couldn’t add/.test(envD.log.alerts[2][0]) && envD.X.adminListInvites().invites.length === 2, 'empty name shows the error in a dialog');
+  ok(env.log.errors.length === 0 && envF.log.errors.length === 0 && envD.log.errors.length === 0, 'no errors in panel scenarios', env.log.errors);
 }
 
 console.log('\nFAILS:', fails);

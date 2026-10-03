@@ -164,13 +164,14 @@
     });
   }
 
-  // Google's own failure text, with a hint for the one cause that isn't obvious:
-  // a sidebar call runs under the browser's default Google account, so with
-  // several accounts signed in it can hit the Sheet as the wrong person.
+  // Google's own failure text, with a hint for the causes that aren't obvious:
+  // the panel's calls carry the browser's Google sign-in as a third-party
+  // cookie, which Safari and private windows block, and a browser signed in to
+  // several Google accounts may send the wrong one.
   function explain(err) {
     var m = String(err && err.message || err || 'Something went wrong.');
     if (/PERMISSION_DENIED|reading from storage|do not have permission/i.test(m)) {
-      return m + ' This usually means the browser is signed in to more than one Google account. Open the Sheet in a window signed in only to the account that owns it, then reopen the panel.';
+      return m + ' The browser didn’t send your Google sign-in with this request. Safari and private windows block the cookies the panel needs, and a browser signed in to several Google accounts may use the wrong one. Open the Sheet in a normal Chrome window signed in only to the account that owns it, or use Friends & Family > Add an invite… instead.';
     }
     return m;
   }

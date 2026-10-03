@@ -192,7 +192,7 @@ function open(env, opts = {}) {
     env3.X.adminListInvites = () => { throw new Error('We\'re sorry, a server error occurred while reading from storage. Error code PERMISSION_DENIED.'); };
     const R = open(env3);
     await R.wait();
-    expect(R.$('#status').classList.contains('error') && /PERMISSION_DENIED/.test(R.$('#status').textContent) && /more than one Google account/.test(R.$('#status').textContent), 'storage permission error explained', R.$('#status').textContent);
+    expect(R.$('#status').classList.contains('error') && /PERMISSION_DENIED/.test(R.$('#status').textContent) && /several Google accounts/.test(R.$('#status').textContent) && /Add an invite/.test(R.$('#status').textContent), 'storage permission error explained', R.$('#status').textContent);
     R.w.close();
   }
 
