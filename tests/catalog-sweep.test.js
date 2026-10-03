@@ -93,6 +93,8 @@ function sectionState(w, sec) {
       if (T.S.items.length !== before + 1) { problems.push(`${cc} ${p.id}: item not added`); continue; }
       const item = T.S.items[T.S.items.length - 1];
       count++;
+      const stale = T.staleOptions(item);
+      if (stale.length) problems.push(`${cc} ${p.id}: fresh item reported stale: ${JSON.stringify(stale)}`);
       // Verify spec: every pick on a still-visible option is in sel; no extra keys
       for (const [k, v] of Object.entries(picks)) {
         if (item.sel[k] !== v) problems.push(`${cc} ${p.id}: picked ${k}=${v} but saved ${item.sel[k]}`);

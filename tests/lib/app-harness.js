@@ -15,7 +15,7 @@ const HOOK = `
     get S() { return S; }, set S(v) { S = v; },
     get DONE() { return DONE; }, get ERR() { return ERR; }, get SUBMIT_ERROR() { return SUBMIT_ERROR; }, get SUBMITTING() { return SUBMITTING; },
     get CUR() { return CUR; },
-    errorsFor, buildPayload, formatAddress, addressSpec, sensitiveKind, resolveOption, appleCareFor, plainSummary, setCountry, openConfigurator, PRODUCT, PRODUCTS, COUNTRIES, COUNTRY, STORES, ONLINE, storeOptions, submit, go, next, itemLines, CFG, artKey, ART, CATEGORY_ART, firstHex,
+    errorsFor, buildPayload, formatAddress, addressSpec, sensitiveKind, resolveOption, appleCareFor, plainSummary, setCountry, openConfigurator, PRODUCT, PRODUCTS, COUNTRIES, COUNTRY, STORES, ONLINE, storeOptions, submit, go, next, itemLines, CFG, artKey, ART, CATEGORY_ART, firstHex, staleOptions,
   };
   if (document.readyState === 'loading')`;
 

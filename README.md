@@ -184,6 +184,7 @@ Illustrations are generic, not model-specific, so a new iPhone looks right witho
 
 - Add the new products and set `"isNew": true` on them; remove `isNew` from last year's.
 - Delete products Apple stopped selling. Saved drafts that still contain one keep working, and the Sheet keeps the name.
+- Remove options Apple dropped (a memory tier, a colour) and add new ones freely. Anyone with an unfinished request that used a removed option is told which item changed and asked to choose again before they can continue, so you never receive a configuration that no longer exists.
 - Refresh `programs.carriers`, `programs.applecare` (which countries get the AppleCare+ question) and `programs.tradeInCountries` if Apple's programs changed.
 - Run `npm run check --prefix tests`, reload, and deploy (see "Put the page online").
 

@@ -415,6 +415,44 @@
     return lines;
   }
 
+  // Choices an item made that the current catalog no longer offers, or no longer
+  // allows next to its other choices, plus required choices added since. A saved
+  // draft can outlive a catalog refresh (a memory tier Apple dropped), and the
+  // configurator only re-checks on Edit, so the Products step checks here too.
+  // Products removed from the catalog are left alone on purpose: the request
+  // still carries the name, and the owner sorts it out when quoting.
+  function staleOptions(item) {
+    if (!item || item.custom) return [];
+    const p = PRODUCT.get(item.pid);
+    if (!p) return [];
+    const sel = item.sel || {};
+    const opts = (p.options || []).map(o => resolveOption(o, item.country || S.country)).filter(Boolean);
+    const available = c => !c.only || Object.entries(c.only).every(([dep, allowed]) => sel[dep] == null || (Array.isArray(allowed) && allowed.includes(sel[dep])));
+    const out = [];
+    for (const o of opts) {
+      if (o.type === 'text') continue;
+      const v = sel[o.id];
+      if (v != null) {
+        const c = o.choices.find(x => x.value === v);
+        if (!c || !available(c)) out.push({ id: o.id, label: o.label, value: v, gone: true });
+      } else if (o.required && o.choices.some(available)) {
+        out.push({ id: o.id, label: o.label, value: '', gone: false });
+      }
+    }
+    // A whole option that disappeared (the item still carries its text).
+    for (const k of Object.keys(sel)) {
+      if (opts.some(o => o.id === k)) continue;
+      const sp = (item.spec || []).find(x => x.id === k);
+      if (sp && sp.kind === 'text') continue;
+      out.push({ id: k, label: sp ? sp.label : k, value: sel[k], gone: true });
+    }
+    return out;
+  }
+  function staleText(list) {
+    const parts = list.map(x => (x.gone ? `${x.label} ${x.value}`.trim() : `${x.label} (new choice)`));
+    return `Changed since you picked it: ${parts.join(', ')}. Edit to choose again.`;
+  }
+
   /* --------------------------------------------------------- addresses */
 
   const ZIP_LABEL = { zip: 'ZIP code', postal: 'Postal code', pin: 'PIN code', eircode: 'Eircode' };
@@ -521,6 +559,7 @@
     if (id === 'products') {
       if (!S.items.length) e.set('bag', 'Add at least one product to continue.');
       else if (S.items.length > MAX_LINES) e.set('bag', `You can request up to ${MAX_LINES} different products at once. Send the rest in a second request.`);
+      else if (S.items.some(i => staleOptions(i).length)) e.set('bag', 'Some products in your bag have changed since you picked them. Edit them to choose again.');
     }
     if (id === 'trade-in') {
       const t = S.tradeIn;
@@ -958,7 +997,7 @@
           if (o.type === 'text') continue;
           if (sel[o.id] != null) {
             const c = o.choices.find(x => x.value === sel[o.id]);
-            if (!c || !available(c)) { resetNote.set(o.id, sel[o.id]); delete sel[o.id]; changed = true; }
+            if (!c || !available(c)) { resetNote.set(o.id, { value: sel[o.id], gone: !c }); delete sel[o.id]; changed = true; }
           }
           if (sel[o.id] == null) {
             const av = o.choices.filter(available);
@@ -1023,7 +1062,9 @@
           if (!noteEl) {
             const noun = /[A-Z]/.test(o.label.slice(1)) ? o.label : o.label.toLowerCase();
             const box = wrap.querySelector('.tiles, .swatches, .field');
-            const msg = h('p', { class: 'opt-reset', role: 'status', text: `${resetNote.get(o.id)} isn’t available with that choice. Choose ${noun} again.` });
+            const was = resetNote.get(o.id);
+            const why = was.gone ? 'is no longer offered' : 'isn’t available with that choice';
+            const msg = h('p', { class: 'opt-reset', role: 'status', text: `${was.value} ${why}. Choose ${noun} again.` });
             if (box) box.before(msg); else wrap.prepend(msg);
           }
         } else {
@@ -1271,11 +1312,13 @@
     const ul = h('ul', { class: 'bag-list' });
     for (const item of S.items) {
       const p = PRODUCT.get(item.pid);
-      ul.append(h('li', { class: 'bag-item', dataset: { id: item.id } },
+      const stale = staleOptions(item);
+      ul.append(h('li', { class: 'bag-item' + (stale.length ? ' stale' : ''), dataset: { id: item.id } },
         art(item.custom ? 'other' : artKey(p || { category: item.cat, name: item.name }), item.hex),
         h('div', null,
           h('div', { class: 'bag-item-name', text: item.qty > 1 ? `${item.name} × ${item.qty}` : item.name }),
           itemLines(item).map(l => h('div', { class: 'bag-item-meta', text: l })),
+          stale.length ? h('div', { class: 'bag-item-warn', text: staleText(stale) }) : null,
           opts && opts.readonly ? null : h('div', { class: 'bag-item-actions' },
             h('button', {
               class: 'link-btn', type: 'button', text: 'Edit', 'aria-label': `Edit ${item.name}`, dataset: { act: 'edit', id: item.id },
